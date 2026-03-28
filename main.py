@@ -48,6 +48,7 @@ gamma = 0.99
 lr = 0.001
 batch_size = 32
 epsilon = 0.9
+target_update_frequency = 100
 
 ### 5. Compile the main DQN network
 main_dqn.compile(optimizer=Adam(learning_rate=lr), loss='mse')
@@ -76,36 +77,47 @@ def train_dqn():
     targets = rewards + (1 - status) * gamma * max_tar_q_values
 
     ## We have state and target values so we can train the main DQN network
-    q_values = main_dqn(states, training=True).numpy()
+    q_values = main_dqn(states, training = False).numpy()
 
     ## We have q-values but we dont know which actons were so update the values
     for i in range(batch_size):
         q_values[i][actions[i]] = targets[i]
 
+    main_dqn.fit(states,q_values, verbose = 0, epochs = 1)
+
     
 
 
-env = gym.make("MountainCar-v0", goal_velocity=0.1) 
+env = gym.make("MountainCar-v0", max_episode_steps = 2000) 
 observation, info = env.reset(seed=42)
-for _ in range(1000):
-    # this is where you would insert your policy
-    action = env.action_space.sample()
+num_episodes = 20
+epsilon_decay = (epsilon - 0.1) * 2 / num_episodes
+episode_rewards = []
 
-    # receiving the next observation, reward and if the episode has terminated or truncated
-    observation, reward, terminated, truncated, info = env.step(action)
+for i in range(num_episodes):
+    observation, info = env.reset()
+    timesteps = 0
+    episode_return = 0
+    terminated = False
+    truncated = False
 
     while not terminated and not truncated:
         action = epsilon_greedy(observation, epsilon)
         next_observation, reward, terminated, truncated, info = env.step(action)
+        status = terminated or truncated
 
-        replay_buffer.append((observation, action, reward, next_observation, terminated or truncated))
+        replay_buffer.append((observation, action, reward, next_observation, status))
         train_dqn()
 
+        timesteps += 1
+        if timesteps % target_update_frequency == 0:
+            target_dqn.set_weights(main_dqn.get_weights())
+
         observation = next_observation
+        episode_return += reward
 
 
-
-
-
-
-
+    epsilon = max(epsilon - epsilon_decay, 0.1)
+    episode_rewards.append(episode_return)
+    print(f"Episode {i+1}, return {episode_return}")
+    target_dqn.set_weights(main_dqn.get_weights())
