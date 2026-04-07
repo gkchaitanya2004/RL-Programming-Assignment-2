@@ -1,0 +1,7 @@
+matplotlib
+scipy
+numpy
+tensorflow
+gymnasium
+gymnasium[classic-control]
+cpprb
